@@ -102,18 +102,44 @@ document.addEventListener('DOMContentLoaded', () => {
       deleteBtn.type = 'button';
       deleteBtn.className = 'preset-btn delete-preset-btn';
       deleteBtn.textContent = 'Delete';
-      deleteBtn.addEventListener('click', () => deletePreset(preset.name));
+      deleteBtn.addEventListener('click', () => {
+        if (confirm(`Delete preset "${preset.name}"?`)) {
+          deletePreset(preset.name);
+        }
+      });
 
       li.append(nameSpan, loadBtn, deleteBtn);
       presetList.appendChild(li);
     });
   }
 
+  function showPresetError(msg) {
+    let errorEl = document.getElementById('preset-error');
+    if (!errorEl) {
+      errorEl = document.createElement('div');
+      errorEl.id = 'preset-error';
+      errorEl.className = 'preset-error';
+      presetNameInput.parentElement.after(errorEl);
+    }
+    errorEl.textContent = msg;
+    errorEl.classList.remove('hidden');
+    setTimeout(() => errorEl.classList.add('hidden'), 3000);
+  }
+
   savePresetBtn.addEventListener('click', () => {
     const name = presetNameInput.value.trim();
-    if (!name) return;
-    savePreset(name, getFormConfig());
-    presetNameInput.value = '';
+    if (!name) {
+      showPresetError('Preset name cannot be empty.');
+      return;
+    }
+    chrome.storage.local.get({ presets: [] }, (result) => {
+      if (result.presets.some((p) => p.name === name)) {
+        showPresetError(`A preset named "${name}" already exists.`);
+        return;
+      }
+      savePreset(name, getFormConfig());
+      presetNameInput.value = '';
+    });
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
