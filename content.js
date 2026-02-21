@@ -1,5 +1,5 @@
 // Content script - injected into web pages for DOM automation
-console.log('[AutoClaude] Content script loaded');
+// Content script active - notify via AUTOMATION_STATUS if needed
 
 // --- DOM Element Detection Utilities ---
 
@@ -131,17 +131,184 @@ function findModeSelector() {
   return queryWithFallback(FLOW_SELECTORS.modeSelector);
 }
 
-// Message listener for commands from the extension
+// --- Status Reporting ---
+
+/**
+ * Send an automation status update to the service worker (relayed to side panel).
+ * @param {'running'|'success'|'error'} state
+ * @param {string} message
+ */
+function sendStatus(state, message) {
+  chrome.runtime.sendMessage({
+    type: 'AUTOMATION_STATUS',
+    payload: { state, message },
+  });
+}
+
+// --- Text Input Utility ---
+
+/**
+ * Set the value of an input/textarea element in a React-compatible way.
+ * Assigns the value via the native setter, then dispatches input/change events
+ * so that React's synthetic event system picks up the change.
+ * @param {HTMLElement} element - The input or textarea element
+ * @param {string} text - The text to enter
+ */
+function setInputValue(element, text) {
+  const nativeInputValueSetter =
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set ||
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+
+  if (nativeInputValueSetter) {
+    nativeInputValueSetter.call(element, text);
+  } else {
+    element.value = text;
+  }
+
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+// --- Mode/Type Selection ---
+
+/**
+ * Attempt to select a generation type (e.g. "image" or "video") in the mode selector.
+ * Handles both <select> elements and custom listbox/button-based selectors.
+ * @param {string} generationType - The type to select
+ * @returns {boolean} Whether selection was attempted
+ */
+function selectGenerationType(generationType) {
+  const modeEl = findModeSelector();
+  if (!modeEl) return false;
+
+  if (modeEl.tagName === 'SELECT') {
+    const option = Array.from(modeEl.options).find(
+      (opt) => opt.value.toLowerCase() === generationType.toLowerCase() ||
+               opt.textContent.toLowerCase().includes(generationType.toLowerCase())
+    );
+    if (option) {
+      modeEl.value = option.value;
+      modeEl.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+  } else {
+    // Custom selector: look for clickable options within or near the element
+    const options = modeEl.querySelectorAll('[role="option"], button, [data-value]');
+    for (const opt of options) {
+      if (opt.textContent.toLowerCase().includes(generationType.toLowerCase())) {
+        opt.click();
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+// --- Core Automation ---
+
+/**
+ * Automate the Google Flow workflow: enter prompt, select type, click generate.
+ * @param {Object} config - Workflow configuration
+ * @param {string} config.prompt - The prompt text to enter
+ * @param {string} [config.generationType] - Generation type (e.g. "image", "video")
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function automateGoogleFlow(config) {
+  const { prompt, generationType } = config;
+
+  if (!prompt || !prompt.trim()) {
+    return { success: false, error: 'No prompt provided.' };
+  }
+
+  // Step 1: Find prompt input
+  sendStatus('running', 'Finding prompt input...');
+  let promptInput = findPromptInput();
+
+  if (!promptInput) {
+    sendStatus('running', 'Waiting for prompt input to appear...');
+    try {
+      promptInput = await waitForElement(FLOW_SELECTORS.promptInput[0], 5000)
+        .catch(() => retryQuery(FLOW_SELECTORS.promptInput[0], 5, 500));
+    } catch {
+      // Try all selectors via polling
+      for (const selector of FLOW_SELECTORS.promptInput) {
+        try {
+          promptInput = await retryQuery(selector, 3, 300);
+          if (promptInput) break;
+        } catch {
+          // continue to next selector
+        }
+      }
+    }
+  }
+
+  if (!promptInput) {
+    const error = 'Could not find the prompt input on the page.';
+    sendStatus('error', error);
+    return { success: false, error };
+  }
+
+  // Step 2: Enter prompt text
+  sendStatus('running', 'Entering prompt text...');
+  promptInput.focus();
+  setInputValue(promptInput, prompt.trim());
+
+  // Step 3: Select generation type if specified
+  if (generationType) {
+    sendStatus('running', `Selecting generation type: ${generationType}...`);
+    const selected = selectGenerationType(generationType);
+    if (!selected) {
+      sendStatus('running', `Mode selector not found or type "${generationType}" unavailable. Continuing with default.`);
+    }
+  }
+
+  // Step 4: Click generate button
+  sendStatus('running', 'Clicking generate button...');
+  let generateBtn = findGenerateButton();
+
+  if (!generateBtn) {
+    try {
+      for (const selector of FLOW_SELECTORS.generateButton) {
+        try {
+          generateBtn = await retryQuery(selector, 3, 300);
+          if (generateBtn) break;
+        } catch {
+          // continue to next selector
+        }
+      }
+    } catch {
+      // fallback exhausted
+    }
+  }
+
+  if (!generateBtn) {
+    const error = 'Could not find the generate button on the page.';
+    sendStatus('error', error);
+    return { success: false, error };
+  }
+
+  generateBtn.click();
+  sendStatus('success', 'Automation completed. Generation triggered.');
+  return { success: true };
+}
+
+// --- Message Listener ---
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { type, payload } = message;
 
   switch (type) {
-    // TODO: DOM automation commands will go here
-    // Examples: click, type, select, scroll, extract text, etc.
+    case 'START_AUTOMATION':
+      automateGoogleFlow(payload)
+        .then((result) => sendResponse(result))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+      break;
+
     default:
       sendResponse({ success: false, error: `Unknown message type: ${type}` });
+      return false;
   }
 
-  // Return true to indicate async sendResponse usage
   return true;
 });
