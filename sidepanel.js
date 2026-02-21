@@ -16,7 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const savePresetBtn = document.getElementById('save-preset-btn');
   const presetList = document.getElementById('preset-list');
 
+  /** Tracks whether we have a live connection to a Google Flow tab. */
+  let isConnected = false;
+
   function setConnectionStatus(connected) {
+    isConnected = connected;
     connectionDot.classList.toggle('connected', connected);
     connectionDot.classList.toggle('disconnected', !connected);
     connectionText.textContent = connected
@@ -55,36 +59,56 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function loadPresets() {
-    chrome.storage.local.get({ presets: [] }, (result) => {
-      renderPresetList(result.presets);
-    });
+    try {
+      chrome.storage.local.get({ presets: [] }, (result) => {
+        if (chrome.runtime.lastError) return;
+        renderPresetList(result.presets);
+      });
+    } catch {
+      /* Storage API unavailable */
+    }
   }
 
   function savePreset(name, config) {
-    chrome.storage.local.get({ presets: [] }, (result) => {
-      const existing = result.presets.filter((p) => p.name !== name);
-      const presets = [...existing, { name, config }];
-      chrome.storage.local.set({ presets });
-    });
+    try {
+      chrome.storage.local.get({ presets: [] }, (result) => {
+        if (chrome.runtime.lastError) return;
+        const existing = result.presets.filter((p) => p.name !== name);
+        const presets = [...existing, { name, config }];
+        chrome.storage.local.set({ presets });
+      });
+    } catch {
+      showPresetError('Failed to save preset.');
+    }
   }
 
   function loadPreset(name) {
-    chrome.storage.local.get({ presets: [] }, (result) => {
-      const preset = result.presets.find((p) => p.name === name);
-      if (preset) loadFormConfig(preset.config);
-    });
+    try {
+      chrome.storage.local.get({ presets: [] }, (result) => {
+        if (chrome.runtime.lastError) return;
+        const preset = result.presets.find((p) => p.name === name);
+        if (preset) loadFormConfig(preset.config);
+      });
+    } catch {
+      /* Storage API unavailable */
+    }
   }
 
   function deletePreset(name) {
-    chrome.storage.local.get({ presets: [] }, (result) => {
-      const presets = result.presets.filter((p) => p.name !== name);
-      chrome.storage.local.set({ presets });
-    });
+    try {
+      chrome.storage.local.get({ presets: [] }, (result) => {
+        if (chrome.runtime.lastError) return;
+        const presets = result.presets.filter((p) => p.name !== name);
+        chrome.storage.local.set({ presets });
+      });
+    } catch {
+      showPresetError('Failed to delete preset.');
+    }
   }
 
   function renderPresetList(presets) {
     presetList.innerHTML = '';
-    presets.forEach((preset, index) => {
+    presets.forEach((preset) => {
       const li = document.createElement('li');
       li.className = 'preset-item';
 
@@ -132,14 +156,22 @@ document.addEventListener('DOMContentLoaded', () => {
       showPresetError('Preset name cannot be empty.');
       return;
     }
-    chrome.storage.local.get({ presets: [] }, (result) => {
-      if (result.presets.some((p) => p.name === name)) {
-        showPresetError(`A preset named "${name}" already exists.`);
-        return;
-      }
-      savePreset(name, getFormConfig());
-      presetNameInput.value = '';
-    });
+    try {
+      chrome.storage.local.get({ presets: [] }, (result) => {
+        if (chrome.runtime.lastError) {
+          showPresetError('Failed to check existing presets.');
+          return;
+        }
+        if (result.presets.some((p) => p.name === name)) {
+          showPresetError(`A preset named "${name}" already exists.`);
+          return;
+        }
+        savePreset(name, getFormConfig());
+        presetNameInput.value = '';
+      });
+    } catch {
+      showPresetError('Failed to save preset.');
+    }
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -155,64 +187,90 @@ document.addEventListener('DOMContentLoaded', () => {
     charCount.textContent = `${len} / 2000`;
   });
 
+  /**
+   * Validates form inputs before submission.
+   * @returns {string|null} Error message or null if valid.
+   */
+  function validateForm() {
+    const prompt = promptInput.value.trim();
+    if (!prompt) {
+      return 'Please enter a prompt before running automation.';
+    }
+    if (!isConnected) {
+      return 'No Google Flow tab detected. Please open Google Flow first.';
+    }
+    return null;
+  }
+
+  /**
+   * Safely sends a message to the service worker, handling disconnection errors.
+   * @param {Object} message
+   * @returns {Promise<Object>}
+   */
+  async function safeSendMessage(message) {
+    try {
+      const response = await chrome.runtime.sendMessage(message);
+      return response;
+    } catch (err) {
+      const errMsg = err.message || '';
+      if (errMsg.includes('Receiving end does not exist') || errMsg.includes('Could not establish connection')) {
+        return { success: false, error: 'Extension service worker is not available. Try reloading the extension.' };
+      }
+      return { success: false, error: errMsg || 'Failed to communicate with extension.' };
+    }
+  }
+
   workflowForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    const prompt = promptInput.value.trim();
-    if (!prompt) {
-      showStatus('Please enter a prompt.');
+    const validationError = validateForm();
+    if (validationError) {
+      showStatus(validationError);
+      setAutomationStatus('error', validationError);
       return;
     }
 
-    const generationType = document.querySelector('input[name="generation-type"]:checked').value;
-    const aspectRatio = document.getElementById('aspect-ratio').value;
-    const quality = document.getElementById('quality').value;
-
-    const config = {
-      prompt,
-      generationType,
-      aspectRatio,
-      quality
-    };
+    const config = getFormConfig();
+    config.prompt = config.prompt.trim();
 
     runBtn.disabled = true;
     runBtn.textContent = 'Running...';
     setAutomationStatus('running', 'Starting automation...');
 
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'START_AUTOMATION',
-        payload: config
-      });
+    const response = await safeSendMessage({
+      type: 'START_AUTOMATION',
+      payload: config
+    });
 
-      if (response && response.success) {
-        setAutomationStatus('success', 'Automation completed successfully.');
-      } else {
-        setAutomationStatus('error', response?.error || 'Unknown error');
-      }
-    } catch (err) {
-      setAutomationStatus('error', err.message);
-    } finally {
-      runBtn.disabled = false;
-      runBtn.textContent = 'Run Automation';
+    if (response && response.success) {
+      setAutomationStatus('success', 'Automation completed successfully.');
+    } else {
+      setAutomationStatus('error', response?.error || 'Unknown error occurred.');
     }
+
+    runBtn.disabled = false;
+    runBtn.textContent = 'Run Automation';
   });
 
   function checkConnection() {
-    chrome.runtime.sendMessage({ type: 'CHECK_CONNECTION' }, (response) => {
-      if (chrome.runtime.lastError) {
-        setConnectionStatus(false);
-        return;
-      }
-      setConnectionStatus(response && response.connected);
-    });
+    try {
+      chrome.runtime.sendMessage({ type: 'CHECK_CONNECTION' }, (response) => {
+        if (chrome.runtime.lastError) {
+          setConnectionStatus(false);
+          return;
+        }
+        setConnectionStatus(response && response.connected);
+      });
+    } catch {
+      setConnectionStatus(false);
+    }
   }
 
   checkConnection();
   setInterval(checkConnection, 3000);
 
   chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === 'AUTOMATION_STATUS') {
+    if (message && message.type === 'AUTOMATION_STATUS') {
       const { state, message: statusMsg } = message.payload || {};
       if (state) {
         setAutomationStatus(state, statusMsg);

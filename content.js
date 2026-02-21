@@ -33,7 +33,7 @@ function waitForElement(selector, timeout = 10000) {
       if (!resolved) {
         resolved = true;
         observer.disconnect();
-        reject(new Error(`waitForElement: "${selector}" not found within ${timeout}ms`));
+        reject(new Error(`Element "${selector}" not found within ${timeout}ms. The page layout may have changed.`));
       }
     }, timeout);
   });
@@ -58,7 +58,7 @@ function retryQuery(selector, maxAttempts = 10, delay = 500) {
         return;
       }
       if (attempts >= maxAttempts) {
-        reject(new Error(`retryQuery: "${selector}" not found after ${maxAttempts} attempts`));
+        reject(new Error(`Element "${selector}" not found after ${maxAttempts} attempts (${maxAttempts * delay}ms total). The element may not exist on this page.`));
         return;
       }
       setTimeout(poll, delay);
@@ -75,8 +75,12 @@ function retryQuery(selector, maxAttempts = 10, delay = 500) {
  */
 function queryWithFallback(selectors) {
   for (const selector of selectors) {
-    const el = document.querySelector(selector);
-    if (el) return el;
+    try {
+      const el = document.querySelector(selector);
+      if (el) return el;
+    } catch {
+      // Invalid selector syntax, skip
+    }
   }
   return null;
 }
@@ -139,10 +143,14 @@ function findModeSelector() {
  * @param {string} message
  */
 function sendStatus(state, message) {
-  chrome.runtime.sendMessage({
-    type: 'AUTOMATION_STATUS',
-    payload: { state, message },
-  });
+  try {
+    chrome.runtime.sendMessage({
+      type: 'AUTOMATION_STATUS',
+      payload: { state, message },
+    });
+  } catch {
+    // Extension context may have been invalidated
+  }
 }
 
 // --- Text Input Utility ---
@@ -181,25 +189,29 @@ function selectGenerationType(generationType) {
   const modeEl = findModeSelector();
   if (!modeEl) return false;
 
-  if (modeEl.tagName === 'SELECT') {
-    const option = Array.from(modeEl.options).find(
-      (opt) => opt.value.toLowerCase() === generationType.toLowerCase() ||
-               opt.textContent.toLowerCase().includes(generationType.toLowerCase())
-    );
-    if (option) {
-      modeEl.value = option.value;
-      modeEl.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
-    }
-  } else {
-    // Custom selector: look for clickable options within or near the element
-    const options = modeEl.querySelectorAll('[role="option"], button, [data-value]');
-    for (const opt of options) {
-      if (opt.textContent.toLowerCase().includes(generationType.toLowerCase())) {
-        opt.click();
+  try {
+    if (modeEl.tagName === 'SELECT') {
+      const option = Array.from(modeEl.options).find(
+        (opt) => opt.value.toLowerCase() === generationType.toLowerCase() ||
+                 opt.textContent.toLowerCase().includes(generationType.toLowerCase())
+      );
+      if (option) {
+        modeEl.value = option.value;
+        modeEl.dispatchEvent(new Event('change', { bubbles: true }));
         return true;
       }
+    } else {
+      // Custom selector: look for clickable options within or near the element
+      const options = modeEl.querySelectorAll('[role="option"], button, [data-value]');
+      for (const opt of options) {
+        if (opt.textContent.toLowerCase().includes(generationType.toLowerCase())) {
+          opt.click();
+          return true;
+        }
+      }
     }
+  } catch {
+    // DOM interaction failure
   }
 
   return false;
@@ -215,60 +227,60 @@ function selectGenerationType(generationType) {
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 async function automateGoogleFlow(config) {
-  const { prompt, generationType } = config;
+  try {
+    const { prompt, generationType } = config || {};
 
-  if (!prompt || !prompt.trim()) {
-    return { success: false, error: 'No prompt provided.' };
-  }
+    if (!prompt || !prompt.trim()) {
+      return { success: false, error: 'No prompt provided.' };
+    }
 
-  // Step 1: Find prompt input
-  sendStatus('running', 'Finding prompt input...');
-  let promptInput = findPromptInput();
+    // Step 1: Find prompt input
+    sendStatus('running', 'Finding prompt input...');
+    let promptInput = findPromptInput();
 
-  if (!promptInput) {
-    sendStatus('running', 'Waiting for prompt input to appear...');
-    try {
-      promptInput = await waitForElement(FLOW_SELECTORS.promptInput[0], 5000)
-        .catch(() => retryQuery(FLOW_SELECTORS.promptInput[0], 5, 500));
-    } catch {
-      // Try all selectors via polling
-      for (const selector of FLOW_SELECTORS.promptInput) {
-        try {
-          promptInput = await retryQuery(selector, 3, 300);
-          if (promptInput) break;
-        } catch {
-          // continue to next selector
+    if (!promptInput) {
+      sendStatus('running', 'Waiting for prompt input to appear...');
+      try {
+        promptInput = await waitForElement(FLOW_SELECTORS.promptInput[0], 5000)
+          .catch(() => retryQuery(FLOW_SELECTORS.promptInput[0], 5, 500));
+      } catch {
+        // Try all selectors via polling
+        for (const selector of FLOW_SELECTORS.promptInput) {
+          try {
+            promptInput = await retryQuery(selector, 3, 300);
+            if (promptInput) break;
+          } catch {
+            // continue to next selector
+          }
         }
       }
     }
-  }
 
-  if (!promptInput) {
-    const error = 'Could not find the prompt input on the page.';
-    sendStatus('error', error);
-    return { success: false, error };
-  }
-
-  // Step 2: Enter prompt text
-  sendStatus('running', 'Entering prompt text...');
-  promptInput.focus();
-  setInputValue(promptInput, prompt.trim());
-
-  // Step 3: Select generation type if specified
-  if (generationType) {
-    sendStatus('running', `Selecting generation type: ${generationType}...`);
-    const selected = selectGenerationType(generationType);
-    if (!selected) {
-      sendStatus('running', `Mode selector not found or type "${generationType}" unavailable. Continuing with default.`);
+    if (!promptInput) {
+      const error = 'Could not find the prompt input on the page. Make sure you are on the Google Flow tool page.';
+      sendStatus('error', error);
+      return { success: false, error };
     }
-  }
 
-  // Step 4: Click generate button
-  sendStatus('running', 'Clicking generate button...');
-  let generateBtn = findGenerateButton();
+    // Step 2: Enter prompt text
+    sendStatus('running', 'Entering prompt text...');
+    promptInput.focus();
+    setInputValue(promptInput, prompt.trim());
 
-  if (!generateBtn) {
-    try {
+    // Step 3: Select generation type if specified
+    if (generationType) {
+      sendStatus('running', `Selecting generation type: ${generationType}...`);
+      const selected = selectGenerationType(generationType);
+      if (!selected) {
+        sendStatus('running', `Mode selector not found or type "${generationType}" unavailable. Continuing with default.`);
+      }
+    }
+
+    // Step 4: Click generate button
+    sendStatus('running', 'Clicking generate button...');
+    let generateBtn = findGenerateButton();
+
+    if (!generateBtn) {
       for (const selector of FLOW_SELECTORS.generateButton) {
         try {
           generateBtn = await retryQuery(selector, 3, 300);
@@ -277,32 +289,43 @@ async function automateGoogleFlow(config) {
           // continue to next selector
         }
       }
-    } catch {
-      // fallback exhausted
     }
-  }
 
-  if (!generateBtn) {
-    const error = 'Could not find the generate button on the page.';
+    if (!generateBtn) {
+      const error = 'Could not find the generate button on the page. The page layout may have changed.';
+      sendStatus('error', error);
+      return { success: false, error };
+    }
+
+    generateBtn.click();
+    sendStatus('success', 'Automation completed. Generation triggered.');
+    return { success: true };
+  } catch (err) {
+    const error = `Automation failed unexpectedly: ${err.message}`;
     sendStatus('error', error);
     return { success: false, error };
   }
-
-  generateBtn.click();
-  sendStatus('success', 'Automation completed. Generation triggered.');
-  return { success: true };
 }
 
 // --- Message Listener ---
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || !message.type) {
+    sendResponse({ success: false, error: 'Invalid message received.' });
+    return true;
+  }
+
   const { type, payload } = message;
 
   switch (type) {
     case 'START_AUTOMATION':
       automateGoogleFlow(payload)
         .then((result) => sendResponse(result))
-        .catch((err) => sendResponse({ success: false, error: err.message }));
+        .catch((err) => sendResponse({ success: false, error: `Automation error: ${err.message}` }));
+      break;
+
+    case 'PING':
+      sendResponse({ success: true, pong: true });
       break;
 
     default:
