@@ -159,6 +159,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  function checkConnection() {
+    chrome.runtime.sendMessage({ type: 'CHECK_CONNECTION' }, (response) => {
+      if (chrome.runtime.lastError) {
+        setConnectionStatus(false);
+        return;
+      }
+      setConnectionStatus(response && response.connected);
+    });
+  }
+
+  checkConnection();
+  setInterval(checkConnection, 3000);
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'AUTOMATION_STATUS') {
+      const { state, message: statusMsg } = message.payload || {};
+      if (state) {
+        setAutomationStatus(state, statusMsg);
+      }
+      if (state === 'success' || state === 'error') {
+        runBtn.disabled = false;
+        runBtn.textContent = 'Run Automation';
+      }
+    }
+  });
+
   function showStatus(text) {
     statusSection.classList.remove('hidden');
     statusMessage.textContent = text;
