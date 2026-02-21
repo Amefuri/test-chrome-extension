@@ -60,8 +60,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function savePresets(presets, callback) {
-    chrome.storage.local.set({ presets }, callback);
+  function savePreset(name, config) {
+    chrome.storage.local.get({ presets: [] }, (result) => {
+      const existing = result.presets.filter((p) => p.name !== name);
+      const presets = [...existing, { name, config }];
+      chrome.storage.local.set({ presets });
+    });
+  }
+
+  function loadPreset(name) {
+    chrome.storage.local.get({ presets: [] }, (result) => {
+      const preset = result.presets.find((p) => p.name === name);
+      if (preset) loadFormConfig(preset.config);
+    });
+  }
+
+  function deletePreset(name) {
+    chrome.storage.local.get({ presets: [] }, (result) => {
+      const presets = result.presets.filter((p) => p.name !== name);
+      chrome.storage.local.set({ presets });
+    });
   }
 
   function renderPresetList(presets) {
@@ -78,18 +96,13 @@ document.addEventListener('DOMContentLoaded', () => {
       loadBtn.type = 'button';
       loadBtn.className = 'preset-btn load-preset-btn';
       loadBtn.textContent = 'Load';
-      loadBtn.addEventListener('click', () => loadFormConfig(preset.config));
+      loadBtn.addEventListener('click', () => loadPreset(preset.name));
 
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
       deleteBtn.className = 'preset-btn delete-preset-btn';
       deleteBtn.textContent = 'Delete';
-      deleteBtn.addEventListener('click', () => {
-        chrome.storage.local.get({ presets: [] }, (result) => {
-          const updated = result.presets.filter((_, i) => i !== index);
-          savePresets(updated, () => renderPresetList(updated));
-        });
-      });
+      deleteBtn.addEventListener('click', () => deletePreset(preset.name));
 
       li.append(nameSpan, loadBtn, deleteBtn);
       presetList.appendChild(li);
@@ -99,14 +112,14 @@ document.addEventListener('DOMContentLoaded', () => {
   savePresetBtn.addEventListener('click', () => {
     const name = presetNameInput.value.trim();
     if (!name) return;
-    const config = getFormConfig();
-    chrome.storage.local.get({ presets: [] }, (result) => {
-      const presets = [...result.presets, { name, config }];
-      savePresets(presets, () => {
-        presetNameInput.value = '';
-        renderPresetList(presets);
-      });
-    });
+    savePreset(name, getFormConfig());
+    presetNameInput.value = '';
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.presets) {
+      renderPresetList(changes.presets.newValue || []);
+    }
   });
 
   loadPresets();
