@@ -5,27 +5,54 @@ document.addEventListener('DOMContentLoaded', () => {
   const charCount = document.getElementById('char-count');
   const workflowForm = document.getElementById('workflow-form');
   const runBtn = document.getElementById('run-btn');
+  const runBtnLabel = runBtn.querySelector('.run-btn-label');
+  const runBtnSpinner = runBtn.querySelector('.run-btn-spinner');
   const statusSection = document.getElementById('status-section');
   const statusMessage = document.getElementById('status-message');
+  const connectionSection = document.getElementById('connection-section');
   const connectionDot = document.getElementById('connection-dot');
   const connectionText = document.getElementById('connection-text');
+  const openFlowLink = document.getElementById('open-flow-link');
   const automationStatusDisplay = document.getElementById('automation-status-display');
   const automationStatusText = document.getElementById('automation-status-text');
   const automationStatusMessage = document.getElementById('automation-status-message');
   const presetNameInput = document.getElementById('preset-name-input');
   const savePresetBtn = document.getElementById('save-preset-btn');
   const presetList = document.getElementById('preset-list');
+  const presetFeedback = document.getElementById('preset-feedback');
+  const presetEmpty = document.getElementById('preset-empty');
 
   /** Tracks whether we have a live connection to a Google Flow tab. */
   let isConnected = false;
+
+  /** Tracks whether automation is currently running. */
+  let isRunning = false;
 
   function setConnectionStatus(connected) {
     isConnected = connected;
     connectionDot.classList.toggle('connected', connected);
     connectionDot.classList.toggle('disconnected', !connected);
+    connectionSection.classList.toggle('connected-bg', connected);
     connectionText.textContent = connected
       ? 'Google Flow tab connected'
       : 'No Google Flow tab detected';
+    openFlowLink.classList.toggle('hidden', connected);
+  }
+
+  openFlowLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    try {
+      chrome.tabs.create({ url: 'https://flow.google.com' });
+    } catch {
+      /* Tabs API unavailable */
+    }
+  });
+
+  function setRunningState(running) {
+    isRunning = running;
+    runBtn.disabled = running;
+    runBtnLabel.textContent = running ? 'Running...' : 'Run Automation';
+    runBtnSpinner.classList.toggle('hidden', !running);
   }
 
   function setAutomationStatus(state, message) {
@@ -75,10 +102,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (chrome.runtime.lastError) return;
         const existing = result.presets.filter((p) => p.name !== name);
         const presets = [...existing, { name, config }];
-        chrome.storage.local.set({ presets });
+        chrome.storage.local.set({ presets }, () => {
+          if (!chrome.runtime.lastError) {
+            showPresetFeedback(`Preset "${name}" saved.`, 'success');
+          }
+        });
       });
     } catch {
-      showPresetError('Failed to save preset.');
+      showPresetFeedback('Failed to save preset.', 'error');
     }
   }
 
@@ -87,7 +118,10 @@ document.addEventListener('DOMContentLoaded', () => {
       chrome.storage.local.get({ presets: [] }, (result) => {
         if (chrome.runtime.lastError) return;
         const preset = result.presets.find((p) => p.name === name);
-        if (preset) loadFormConfig(preset.config);
+        if (preset) {
+          loadFormConfig(preset.config);
+          showPresetFeedback(`Loaded "${name}".`, 'success');
+        }
       });
     } catch {
       /* Storage API unavailable */
@@ -99,15 +133,20 @@ document.addEventListener('DOMContentLoaded', () => {
       chrome.storage.local.get({ presets: [] }, (result) => {
         if (chrome.runtime.lastError) return;
         const presets = result.presets.filter((p) => p.name !== name);
-        chrome.storage.local.set({ presets });
+        chrome.storage.local.set({ presets }, () => {
+          if (!chrome.runtime.lastError) {
+            showPresetFeedback(`Preset "${name}" deleted.`, 'success');
+          }
+        });
       });
     } catch {
-      showPresetError('Failed to delete preset.');
+      showPresetFeedback('Failed to delete preset.', 'error');
     }
   }
 
   function renderPresetList(presets) {
     presetList.innerHTML = '';
+    presetEmpty.classList.toggle('hidden', presets.length > 0);
     presets.forEach((preset) => {
       const li = document.createElement('li');
       li.className = 'preset-item';
@@ -120,12 +159,14 @@ document.addEventListener('DOMContentLoaded', () => {
       loadBtn.type = 'button';
       loadBtn.className = 'preset-btn load-preset-btn';
       loadBtn.textContent = 'Load';
+      loadBtn.title = `Load "${preset.name}"`;
       loadBtn.addEventListener('click', () => loadPreset(preset.name));
 
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
       deleteBtn.className = 'preset-btn delete-preset-btn';
       deleteBtn.textContent = 'Delete';
+      deleteBtn.title = `Delete "${preset.name}"`;
       deleteBtn.addEventListener('click', () => {
         if (confirm(`Delete preset "${preset.name}"?`)) {
           deletePreset(preset.name);
@@ -137,40 +178,38 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function showPresetError(msg) {
-    let errorEl = document.getElementById('preset-error');
-    if (!errorEl) {
-      errorEl = document.createElement('div');
-      errorEl.id = 'preset-error';
-      errorEl.className = 'preset-error';
-      presetNameInput.parentElement.after(errorEl);
-    }
-    errorEl.textContent = msg;
-    errorEl.classList.remove('hidden');
-    setTimeout(() => errorEl.classList.add('hidden'), 3000);
+  /** Shows feedback message in the preset section. */
+  function showPresetFeedback(msg, type) {
+    presetFeedback.textContent = msg;
+    presetFeedback.className = 'preset-feedback ' + type;
+    presetFeedback.classList.remove('hidden');
+    clearTimeout(showPresetFeedback._timer);
+    showPresetFeedback._timer = setTimeout(() => {
+      presetFeedback.classList.add('hidden');
+    }, 2500);
   }
 
   savePresetBtn.addEventListener('click', () => {
     const name = presetNameInput.value.trim();
     if (!name) {
-      showPresetError('Preset name cannot be empty.');
+      showPresetFeedback('Preset name cannot be empty.', 'error');
       return;
     }
     try {
       chrome.storage.local.get({ presets: [] }, (result) => {
         if (chrome.runtime.lastError) {
-          showPresetError('Failed to check existing presets.');
+          showPresetFeedback('Failed to check existing presets.', 'error');
           return;
         }
         if (result.presets.some((p) => p.name === name)) {
-          showPresetError(`A preset named "${name}" already exists.`);
+          showPresetFeedback(`A preset named "${name}" already exists.`, 'error');
           return;
         }
         savePreset(name, getFormConfig());
         presetNameInput.value = '';
       });
     } catch {
-      showPresetError('Failed to save preset.');
+      showPresetFeedback('Failed to save preset.', 'error');
     }
   });
 
@@ -223,6 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
   workflowForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    if (isRunning) return;
+
     const validationError = validateForm();
     if (validationError) {
       showStatus(validationError);
@@ -233,8 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const config = getFormConfig();
     config.prompt = config.prompt.trim();
 
-    runBtn.disabled = true;
-    runBtn.textContent = 'Running...';
+    setRunningState(true);
     setAutomationStatus('running', 'Starting automation...');
 
     const response = await safeSendMessage({
@@ -248,8 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setAutomationStatus('error', response?.error || 'Unknown error occurred.');
     }
 
-    runBtn.disabled = false;
-    runBtn.textContent = 'Run Automation';
+    setRunningState(false);
   });
 
   function checkConnection() {
@@ -276,8 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setAutomationStatus(state, statusMsg);
       }
       if (state === 'success' || state === 'error') {
-        runBtn.disabled = false;
-        runBtn.textContent = 'Run Automation';
+        setRunningState(false);
       }
     }
   });
@@ -286,4 +324,13 @@ document.addEventListener('DOMContentLoaded', () => {
     statusSection.classList.remove('hidden');
     statusMessage.textContent = text;
   }
+
+  /* Keyboard shortcuts */
+  document.addEventListener('keydown', (e) => {
+    /* Ctrl+S / Cmd+S to save preset */
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      savePresetBtn.click();
+    }
+  });
 });

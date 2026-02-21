@@ -13,9 +13,10 @@
       <p class="subtitle">Google Flow Automation</p>
     </header>
 
-    <section class="connection-status">
+    <section class="connection-status" id="connection-section">
       <span id="connection-dot" class="status-dot disconnected"></span>
       <span id="connection-text" class="connection-text">No Google Flow tab detected</span>
+      <a id="open-flow-link" href="#" class="open-flow-link" title="Open Google Flow in a new tab">Open Google Flow</a>
     </section>
 
     <section class="automation-status">
@@ -33,9 +34,10 @@
         <textarea
           id="prompt-input"
           class="prompt-textarea"
-          placeholder="Describe what you want to generate..."
+          placeholder="e.g. A serene mountain landscape at sunset with warm golden light..."
           rows="5"
           maxlength="2000"
+          title="Describe what you want to generate. Be specific for best results."
         ></textarea>
         <span id="char-count" class="char-count">0 / 2000</span>
       </section>
@@ -43,11 +45,11 @@
       <section class="form-section">
         <label class="form-label">Generation Type</label>
         <div class="radio-group">
-          <label class="radio-option">
+          <label class="radio-option" title="Generate a static image">
             <input type="radio" name="generation-type" value="image" checked>
             <span class="radio-label">Image</span>
           </label>
-          <label class="radio-option">
+          <label class="radio-option" title="Generate a video clip">
             <input type="radio" name="generation-type" value="video">
             <span class="radio-label">Video</span>
           </label>
@@ -59,7 +61,7 @@
 
         <div class="form-field">
           <label for="aspect-ratio" class="field-label">Aspect Ratio</label>
-          <select id="aspect-ratio" class="form-select">
+          <select id="aspect-ratio" class="form-select" title="Choose the output dimensions">
             <option value="16:9">16:9 (Landscape)</option>
             <option value="9:16">9:16 (Portrait)</option>
             <option value="1:1">1:1 (Square)</option>
@@ -69,14 +71,17 @@
 
         <div class="form-field">
           <label for="quality" class="field-label">Quality</label>
-          <select id="quality" class="form-select">
+          <select id="quality" class="form-select" title="Higher quality takes longer to generate">
             <option value="standard">Standard</option>
             <option value="high">High</option>
           </select>
         </div>
       </section>
 
-      <button type="submit" id="run-btn" class="run-btn">Run Automation</button>
+      <button type="submit" id="run-btn" class="run-btn" title="Run automation (Enter)">
+        <span class="run-btn-label">Run Automation</span>
+        <span class="run-btn-spinner hidden"></span>
+      </button>
     </form>
 
     <section id="status-section" class="status-section hidden">
@@ -90,12 +95,15 @@
           type="text"
           id="preset-name-input"
           class="preset-name-input"
-          placeholder="Preset name..."
+          placeholder="Enter a name for this preset..."
           maxlength="50"
+          title="Name your preset (Ctrl+S to save)"
         >
-        <button type="button" id="save-preset-btn" class="preset-btn save-preset-btn">Save Preset</button>
+        <button type="button" id="save-preset-btn" class="preset-btn save-preset-btn" title="Save current settings as a preset (Ctrl+S)">Save Preset</button>
       </div>
+      <div id="preset-feedback" class="preset-feedback hidden"></div>
       <ul id="preset-list" class="preset-list"></ul>
+      <p id="preset-empty" class="preset-empty hidden">No presets saved yet. Fill in your settings and save one above.</p>
     </section>
   </div>
   <script src="sidepanel.js"></script>
