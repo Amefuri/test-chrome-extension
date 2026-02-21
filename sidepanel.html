@@ -7,7 +7,68 @@
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app">
+    <header class="panel-header">
+      <h1>Workflow Automator</h1>
+      <p class="subtitle">Google Flow Automation</p>
+    </header>
+
+    <form id="workflow-form" class="workflow-form">
+      <section class="form-section">
+        <label for="prompt-input" class="form-label">Prompt</label>
+        <textarea
+          id="prompt-input"
+          class="prompt-textarea"
+          placeholder="Describe what you want to generate..."
+          rows="5"
+          maxlength="2000"
+        ></textarea>
+        <span id="char-count" class="char-count">0 / 2000</span>
+      </section>
+
+      <section class="form-section">
+        <label class="form-label">Generation Type</label>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="generation-type" value="image" checked>
+            <span class="radio-label">Image</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="generation-type" value="video">
+            <span class="radio-label">Video</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <label class="form-label">Style Options</label>
+
+        <div class="form-field">
+          <label for="aspect-ratio" class="field-label">Aspect Ratio</label>
+          <select id="aspect-ratio" class="form-select">
+            <option value="16:9">16:9 (Landscape)</option>
+            <option value="9:16">9:16 (Portrait)</option>
+            <option value="1:1">1:1 (Square)</option>
+            <option value="4:3">4:3 (Standard)</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="quality" class="field-label">Quality</label>
+          <select id="quality" class="form-select">
+            <option value="standard">Standard</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </section>
+
+      <button type="submit" id="run-btn" class="run-btn">Run Automation</button>
+    </form>
+
+    <section id="status-section" class="status-section hidden">
+      <p id="status-message" class="status-message"></p>
+    </section>
+  </div>
   <script src="sidepanel.js"></script>
 </body>
 </html>

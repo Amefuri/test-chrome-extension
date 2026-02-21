@@ -22,4 +22,182 @@ html, body {
   width: 100%;
   height: 100%;
   padding: 16px;
+  overflow-y: auto;
+}
+
+.panel-header {
+  margin-bottom: 20px;
+}
+
+.panel-header h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.panel-header .subtitle {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.workflow-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.prompt-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #fafafa;
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color 0.15s;
+}
+
+.prompt-textarea:focus {
+  outline: none;
+  border-color: #4f46e5;
+  background: #fff;
+}
+
+.prompt-textarea::placeholder {
+  color: #9ca3af;
+}
+
+.char-count {
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: right;
+}
+
+.radio-group {
+  display: flex;
+  gap: 12px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  flex: 1;
+  justify-content: center;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.radio-option:has(input:checked) {
+  border-color: #4f46e5;
+  background: #eef2ff;
+}
+
+.radio-option input[type="radio"] {
+  accent-color: #4f46e5;
+}
+
+.radio-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-field + .form-field {
+  margin-top: 8px;
+}
+
+.field-label {
+  font-size: 12px;
+  color: #666;
+}
+
+.form-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #1a1a1a;
+  background: #fafafa;
+  cursor: pointer;
+  appearance: auto;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: #4f46e5;
+}
+
+.run-btn {
+  width: 100%;
+  padding: 12px;
+  background: #4f46e5;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  margin-top: auto;
+}
+
+.run-btn:hover {
+  background: #4338ca;
+}
+
+.run-btn:active {
+  background: #3730a3;
+}
+
+.run-btn:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.status-section {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #f3f4f6;
+}
+
+.status-message {
+  font-size: 13px;
+  color: #333;
+}
+
+.hidden {
+  display: none;
 }
