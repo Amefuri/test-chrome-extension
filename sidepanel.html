@@ -13,6 +13,20 @@
       <p class="subtitle">Google Flow Automation</p>
     </header>
 
+    <section class="connection-status">
+      <span id="connection-dot" class="status-dot disconnected"></span>
+      <span id="connection-text" class="connection-text">No Google Flow tab detected</span>
+    </section>
+
+    <section class="automation-status">
+      <span class="form-label">Status</span>
+      <div id="automation-status-display" class="automation-status-display idle">
+        <span id="automation-status-icon" class="automation-status-icon">●</span>
+        <span id="automation-status-text">Idle</span>
+      </div>
+      <p id="automation-status-message" class="automation-status-message hidden"></p>
+    </section>
+
     <form id="workflow-form" class="workflow-form">
       <section class="form-section">
         <label for="prompt-input" class="form-label">Prompt</label>
@@ -67,6 +81,21 @@
 
     <section id="status-section" class="status-section hidden">
       <p id="status-message" class="status-message"></p>
+    </section>
+
+    <section class="preset-section">
+      <span class="form-label">Presets</span>
+      <div class="preset-save-row">
+        <input
+          type="text"
+          id="preset-name-input"
+          class="preset-name-input"
+          placeholder="Preset name..."
+          maxlength="50"
+        >
+        <button type="button" id="save-preset-btn" class="preset-btn save-preset-btn">Save Preset</button>
+      </div>
+      <ul id="preset-list" class="preset-list"></ul>
     </section>
   </div>
   <script src="sidepanel.js"></script>
