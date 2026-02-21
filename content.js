@@ -99,7 +99,7 @@ const FLOW_SELECTORS = {
     '[data-testid="generate-button"]',
     '[aria-label="Generate"]',
     'button.generate-btn',
-    'button:has-text("Generate")',
+    'button[data-action="generate"]',
     'button[type="submit"]',
   ],
   modeSelector: [

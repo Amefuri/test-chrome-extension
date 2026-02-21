@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
   openFlowLink.addEventListener('click', (e) => {
     e.preventDefault();
     try {
-      chrome.tabs.create({ url: 'https://flow.google.com' });
+      chrome.tabs.create({ url: 'https://labs.google/fx/tools/flow' });
     } catch {
       /* Tabs API unavailable */
     }
